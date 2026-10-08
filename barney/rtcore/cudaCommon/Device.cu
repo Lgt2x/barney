@@ -116,6 +116,15 @@ namespace BARNEY_NS {
       BARNEY_CUDA_SYNC_CHECK();
       
       int saved = setActive();
+#ifdef USE_HIP
+      /* HIP: the default per-thread device-side stack for indirect
+         (function-pointer) calls is only 1KB. The SBT any-hit call
+         chain (anyHit -> setHitAttributes -> material) exceeds that,
+         and the overflow corrupts the caller's private memory (the
+         BVH traversal stack), causing spurious illegal-memory-access /
+         aperture-violation faults. Raise the device stack size. */
+      hipDeviceSetLimit(hipLimitStackSize, 16*1024);
+#endif
       BARNEY_CUDA_CALL(StreamCreateWithFlags(&stream,cudaStreamNonBlocking));
       // BARNEY_CUDA_CALL(StreamCreate(&stream));
       restoreActive(saved);

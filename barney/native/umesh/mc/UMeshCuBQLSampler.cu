@@ -54,11 +54,31 @@ namespace BARNEY_NS {
                                 primBounds,valueRanges);
         device->rtc->sync();
 
-#if BARNEY_RTC_CPU || defined(__HIPCC__)
+#if BARNEY_RTC_CPU
         cuBQL::cpu::spatialMedian(pld->bvh,
                                   (const cuBQL::box_t<float,3>*)primBounds,
                                   numCells,
                                   cuBQL::BuildConfig());
+#elif defined(__HIPCC__)
+        // The CPU builder consumes and produces host memory. GPU
+        // traversal must instead receive device-resident BVH arrays.
+        std::vector<cuBQL::box3f> hostBounds(numCells);
+        device->rtc->copy(hostBounds.data(), primBounds,
+                         numCells * sizeof(cuBQL::box3f));
+        bvh_t hostBVH = {0,0,0,0};
+        cuBQL::cpu::spatialMedian(hostBVH, hostBounds.data(), numCells,
+                                 cuBQL::BuildConfig());
+        pld->bvh = hostBVH;
+        pld->bvh.nodes = static_cast<node_t *>(device->rtc->allocMem(
+            hostBVH.numNodes * sizeof(node_t)));
+        pld->bvh.primIDs = static_cast<uint32_t *>(device->rtc->allocMem(
+            hostBVH.numPrims * sizeof(uint32_t)));
+        device->rtc->copy(pld->bvh.nodes, hostBVH.nodes,
+                         hostBVH.numNodes * sizeof(node_t));
+        device->rtc->copy(pld->bvh.primIDs, hostBVH.primIDs,
+                         hostBVH.numPrims * sizeof(uint32_t));
+        delete[] hostBVH.nodes;
+        delete[] hostBVH.primIDs;
 #else
         /*! iw - make sure to have cubql use regular device memory, not
           async mallocs; else we may allocate all memory on the first
@@ -79,4 +99,3 @@ namespace BARNEY_NS {
 
   }
 } // ::barney
-

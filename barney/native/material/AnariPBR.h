@@ -15,7 +15,14 @@ namespace BARNEY_NS {
     struct AnariPBR : public HostMaterial {
       struct DD {
 #if RTC_DEVICE_CODE
+#ifdef USE_HIP
+        // Keep PBR evaluation in its caller: the out-of-line HIP path
+        // faults on attribute-mapped baseColor in capsule intersections,
+        // even with a larger device stack.
+        __forceinline__ __rtc_device
+#else
        inline __rtc_device
+#endif
         PackedBSDF createBSDF(const HitAttributes &hitData,
                               const Sampler::DD *samplers,
                               bool dbg) const;
@@ -95,7 +102,11 @@ namespace BARNEY_NS {
     };
       
 #if RTC_DEVICE_CODE
+#ifdef USE_HIP
+    __forceinline__ __rtc_device
+#else
     inline __rtc_device
+#endif
     PackedBSDF AnariPBR::DD::createBSDF(const HitAttributes &hitData,
                                         const Sampler::DD *samplers,
                                         bool dbg) const

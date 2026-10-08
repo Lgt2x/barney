@@ -11,11 +11,25 @@
 #include <mpi.h>
 #include <stdexcept>
 
+#ifdef USE_HIP
+#include <hip/hip_runtime_api.h>
+#endif
+
 #define BN_MPI_CALL(fctCall)                                            \
   { int rc = MPI_##fctCall; if (rc != MPI_SUCCESS) throw native::Exception(__PRETTY_FUNCTION__,rc); }
     
 namespace BARNEY_NS {
   namespace native {
+
+#ifdef USE_HIP
+    inline void synchronizeForMPI()
+    {
+      // ROCm-aware MPI does not order transfers with BARNEY's GPU streams.
+      const auto error = hipDeviceSynchronize();
+      if (error != hipSuccess)
+        throw std::runtime_error(hipGetErrorString(error));
+    }
+#endif
 
     inline std::string mpiErrorString(int rc)
     {
@@ -107,6 +121,9 @@ namespace BARNEY_NS {
     inline void Comm::recv(int fromRank, int tag,
                                   T *buffer, int numItems, MPI_Request &req)
     {
+#ifdef USE_HIP
+      if (numItems) synchronizeForMPI();
+#endif
       // BN_MPI_CALL(Recv(buffer,numItems*sizeof(T),MPI_BYTE,
       //                  fromRank,tag,comm,MPI_STATUS_IGNORE),
       //             "Irecv");
@@ -126,6 +143,9 @@ namespace BARNEY_NS {
       assert(toRank >= 0);
       assert(toRank < size);
       assert(size > 0);
+#ifdef USE_HIP
+      if (numItems) synchronizeForMPI();
+#endif
       BN_MPI_CALL(Isend(buffer,
                         numItems*sizeof(T),MPI_BYTE,
                         // 1,MPI_INT,
