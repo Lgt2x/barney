@@ -60,9 +60,26 @@ namespace BARNEY_NS {
       textureDesc.borderColor[3]   = desc.borderColor.w;
       textureDesc.normalizedCoords = desc.normalizedCoords;
       
+#if defined(__HIP_PLATFORM_AMD__) || defined(USE_HIP) || defined(__HIPCC__)
+      auto result = cudaCreateTextureObject(&textureObject,
+                                             &resourceDesc,
+                                             &textureDesc,0);
+      if (result == hipErrorNotSupported && data->dims.z != 0
+          && textureDesc.filterMode == cudaFilterModeLinear) {
+        // MI250X (gfx90a) does not support HIP 3D linear texture filtering
+        // Retry with nearest-neighbor sampling so volume
+        // rendering can proceed, at the cost of interpolation quality.
+        textureDesc.filterMode = cudaFilterModePoint;
+        result = cudaCreateTextureObject(&textureObject,
+                                         &resourceDesc,
+                                         &textureDesc,0);
+      }
+      BARNEY_CUDA_CHECK(result);
+#else
       BARNEY_CUDA_CALL(CreateTextureObject(&textureObject,
-                                           &resourceDesc,
-                                           &textureDesc,0));
+                                            &resourceDesc,
+                                            &textureDesc,0));
+#endif
     }
 
     Texture::~Texture()
