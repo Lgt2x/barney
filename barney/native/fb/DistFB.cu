@@ -654,6 +654,9 @@ namespace BARNEY_NS {
 
       if (context->isActiveWorker)
         for (auto device : *devices)  {
+          // TiledFB::resize initializes tileDescs on the device stream.
+          // MPI does not order its reads after work on that stream.
+          device->rtc->sync();
           context->world.send(owningRank,
                               device->contextRank(),
                               getFor(device)->tileDescs,
